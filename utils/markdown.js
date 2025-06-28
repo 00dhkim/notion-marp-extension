@@ -1,45 +1,70 @@
+// utils/markdown.js  –  Markdown 변환 + 중첩 리스트 지원
+const INDENT = "  ";                 // 2-space 들여쓰기
 
 export function blocksToMarkdown(blocks, depth = 0) {
   const md = [];
-  const indent = "  ".repeat(depth);
-  for (const b of blocks) {
-    const text = (b[b.type]?.rich_text || []).map(rt => rt.plain_text).join("");
-    switch (b.type) {
+  let i = 0;
+
+  while (i < blocks.length) {
+    const block = blocks[i];
+    const type = block.type;
+    const rich = block[type]?.rich_text ?? [];
+    const text = rich.map(t => t.plain_text).join("");
+
+    /* ───────── 리스트 그룹 처리 ───────── */
+    if (type === "bulleted_list_item" || type === "numbered_list_item") {
+      // 같은 타입이 연속될 때 묶어서 처리
+      const group = [];
+      let j = i;
+      while (
+        j < blocks.length &&
+        blocks[j].type === type
+      ) {
+        group.push(blocks[j]);
+        j++;
+      }
+      md.push(
+        group
+          .map(item => {
+            const mark = type === "bulleted_list_item" ? "- " : "1. ";
+            const line =
+              INDENT.repeat(depth) +
+              mark +
+              (item[item.type].rich_text || [])
+                .map(t => t.plain_text)
+                .join("");
+            const children = item.children
+              ? blocksToMarkdown(item.children, depth + 1)
+              : "";
+            return line + "\n" + children;
+          })
+          .join("")
+      );
+      i = j;
+      continue;
+    }
+
+    /* ───────── 일반 블록들 ───────── */
+    switch (type) {
       case "paragraph":
-        md.push(`${indent}${text}\n`);
-        break;
-      case "heading_1":
-        md.push(`${indent}# ${text}\n\n`);
-        break;
-      case "heading_2":
-        md.push(`${indent}## ${text}\n\n`);
-        break;
-      case "heading_3":
-        md.push(`${indent}### ${text}\n\n`);
-        break;
-      case "bulleted_list_item":
-        md.push(`${indent}- ${text}\n`);
-        if (b.has_children && b.children) md.push(blocksToMarkdown(b.children, depth + 1));
-        break;
-      case "numbered_list_item":
-        md.push(`${indent}1. ${text}\n`);
-        if (b.has_children && b.children) md.push(blocksToMarkdown(b.children, depth + 1));
-        break;
-      case "code":
-        const lang = b.code.language || "";
-        md.push(`${indent}\n\`\`\`${lang}\n${text}\n\`\`\`\n\n`);
+        if (text.trim())
+          md.push(INDENT.repeat(depth) + text.trim() + "\n\n");
         break;
       case "quote":
-        md.push(`${indent}> ${text}\n\n`);
+        md.push(INDENT.repeat(depth) + "> " + text + "\n\n");
         break;
-      case "image":
-        const src = b.image.type === "external" ? b.image.external.url : b.image.file.url;
-        md.push(`${indent}![](${src})\n\n`);
-        break;
+      // 필요하면 heading, to_do 등 추가
       default:
-        // fallback: plain text representation
-        if (text) md.push(`${indent}${text}\n`);
+        // 기타 블록은 무시하거나 로깅
+        console.debug("Unhandled block type:", type);
     }
+
+    // 자식 블록
+    if (block.children?.length) {
+      md.push(blocksToMarkdown(block.children, depth));
+    }
+    i++;
   }
+
   return md.join("");
 }

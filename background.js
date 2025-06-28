@@ -38,13 +38,14 @@ async function handleExport(pageId) {
   return askLLM(markdown, openaiKey);
 }
 
-async function fetchPageAsMarkdown(pageId, token) {
+// 🔄 완전히 교체하세요
+async function fetchBlockTree(rootId, token) {
   const blocks = [];
   let cursor = null;
 
   do {
     const url =
-      `https://api.notion.com/v1/blocks/${pageId}/children?page_size=100` +
+      `https://api.notion.com/v1/blocks/${rootId}/children?page_size=100` +
       (cursor ? `&start_cursor=${cursor}` : "");
 
     const res = await fetch(url, {
@@ -61,7 +62,18 @@ async function fetchPageAsMarkdown(pageId, token) {
     cursor = data.next_cursor;
   } while (cursor);
 
-  return blocksToMarkdown(blocks);
+  // 자식이 있으면 재귀적으로 가져오기
+  for (const node of blocks) {
+    if (node.has_children) {
+      node.children = await fetchBlockTree(node.id, token);
+    }
+  }
+  return blocks;
+}
+
+async function fetchPageAsMarkdown(pageId, token) {
+  const tree = await fetchBlockTree(pageId, token);
+  return blocksToMarkdown(tree);   // 아래 2단계에서 개선
 }
 
 async function askLLM(rawMd, openaiKey) {
