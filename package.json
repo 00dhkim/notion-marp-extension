@@ -1,0 +1,12 @@
+{
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.6",
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "esbuild": "^0.25.5",
+    "rollup": "^4.44.1"
+  },
+  "dependencies": {
+    "@marp-team/marp-core": "^4.1.0",
+    "html2pdf.js": "^0.10.1"
+  }
+}

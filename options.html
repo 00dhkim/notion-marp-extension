@@ -1,0 +1,29 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Notion → Marp: Options</title>
+<style>
+  body { font-family: sans-serif; padding: 24px; max-width: 600px; }
+  label { display: block; margin-top: 16px; }
+  input[type="text"] { width: 100%; padding: 6px; font-size: 14px; }
+  button { margin-top: 24px; padding: 8px 14px; font-size: 14px; }
+</style>
+</head>
+<body>
+  <h1>Notion → Marp Exporter</h1>
+  <p>Enter your integration tokens. They are stored only in Chrome Sync storage.</p>
+  <label>
+    Notion Integration Token (starts with <code>secret_</code>)
+    <input type="text" id="notion" placeholder="secret_xxx" />
+  </label>
+  <label>
+    OpenAI API Key
+    <input type="text" id="openai" placeholder="sk-..." />
+  </label>
+  <button id="save">Save</button>
+  <span id="status"></span>
+<script src="options.js"></script>
+</body>
+</html>
