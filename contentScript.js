@@ -31,7 +31,8 @@ function startExport() {
   chrome.runtime.sendMessage({ type: 'EXPORT_PAGE', pageId }, async ({ ok, marpMarkdown, error } = {}) => {
     if (!ok) return done('Export failed: ' + (error || 'Unknown error'));
     try {
-      await renderMarpToPdf(marpMarkdown);
+      // await renderMarpToPdf(marpMarkdown);
+      chrome.runtime.sendMessage({ type: 'BUILD_PDF', marpMarkdown });
     } catch (e) {
       console.error(e);
       return done('PDF generation failed: ' + e.message);

@@ -10,7 +10,9 @@
   "permissions": [
     "storage",
     "activeTab",
-    "scripting"
+    "scripting",
+    "downloads",
+    "debugger"
   ],
   "host_permissions": [
     "https://api.notion.com/*",
