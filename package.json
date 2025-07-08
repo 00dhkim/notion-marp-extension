@@ -1,12 +1,22 @@
 {
+  "name": "notion-marp-extension",
+  "version": "0.0.1",
+  "scripts": {
+    "build": "rollup -c",
+    "watch": "rollup -c -w"
+  },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.6",
+    "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
     "esbuild": "^0.25.5",
-    "rollup": "^4.44.1"
+    "rollup": "^4.44.1",
+    "rollup-plugin-polyfill-node": "^0.13.0"
   },
   "dependencies": {
     "@marp-team/marp-core": "^4.1.0",
-    "html2pdf.js": "^0.10.1"
+    "@notionhq/client": "^4.0.0",
+    "html2pdf.js": "^0.10.1",
+    "notion-to-md": "^3.1.9"
   }
 }

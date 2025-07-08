@@ -48,6 +48,12 @@ function startExport() {
 }
 
 function parseNotionPageId(path) {
+  // 전체가 32자리 UUID(하이픈 없음)인 경우
+  const clean = path.replace(/[^0-9a-f]/gi, '');
+  if (clean.length === 32) {
+    return clean.replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5');
+  }
+  // 기존 방식: 마지막 '-' 뒤 추출
   const id = path.split('-').pop().replace(/[^0-9a-f]/gi, '');
   return id.length === 32 ? id.replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5') : null;
 }

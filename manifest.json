@@ -1,8 +1,7 @@
-
 {
   "manifest_version": 3,
   "name": "Notion → Marp Exporter",
-  "description": "One‑click export of any Notion page to a Marp PDF / PPTX, fully client‑side.",
+  "description": "One-click export of any Notion page to a Marp PDF / PPTX, fully client-side.",
   "version": "1.0.0",
   "icons": {
     "128": "icons/icon128.png"
@@ -16,30 +15,37 @@
   ],
   "host_permissions": [
     "https://api.notion.com/*",
-    "https://api.openai.com/*"
+    "https://generativelanguage.googleapis.com/*"
   ],
   "background": {
-    "service_worker": "background.js",
+    "service_worker": "dist/background.js",
     "type": "module"
   },
   "content_scripts": [
     {
-      "matches": ["https://www.notion.so/*"],
-      "js": ["contentScript.js"],
+      "matches": [
+        "https://www.notion.so/*"
+      ],
+      "js": [
+        "contentScript.js"
+      ],
       "run_at": "document_idle"
     }
   ],
-  "options_page": "options.html",
-  "action": {
-    "default_title": "Export this page to Marp"
-  },
   "web_accessible_resources": [
     {
       "resources": [
         "utils/marp.esm.js",
         "utils/html2pdf.esm.js"
       ],
-      "matches": ["https://*.notion.site/*", "https://www.notion.so/*"]
+      "matches": [
+        "https://*.notion.site/*",
+        "https://www.notion.so/*"
+      ]
     }
-  ]
+  ],
+  "options_page": "options.html",
+  "action": {
+    "default_title": "Export this page to Marp"
+  }
 }

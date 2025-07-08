@@ -1,6 +1,7 @@
 // background.js – MV3 service-worker (ESM)
 
-import { blocksToMarkdown } from "./utils/markdown.js";
+import { Client as NotionClient } from "@notionhq/client";
+import { NotionToMarkdown } from "notion-to-md";
 import { Marp } from "./utils/marp.esm.js";
 
 const NOTION_VERSION = "2022-06-28";
@@ -8,6 +9,7 @@ const marp = new Marp();
 
 /* ────────── 메시지 수신 ────────── */
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  console.log('[background] 메시지 수신:', msg, sender);
   if (msg?.type === "EXPORT_PAGE") {
     (async () => {
       try {
@@ -15,7 +17,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         await buildPdf(marpMarkdown, getSenderTitle(sender) || "slides");
         sendResponse({ ok: true });
       } catch (err) {
-        console.error(err);
+        console.error('[background] EXPORT_PAGE 처리 오류:', err);
         sendResponse({ ok: false, error: err.message });
       }
     })();
@@ -25,58 +27,46 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 /* ────────── 1. Notion → Marp MD ────────── */
 async function handleExport(pageId) {
+  console.log('[background] handleExport 호출:', pageId);
   const { notionToken, openaiKey } = await chrome.storage.sync.get({
     notionToken: "",
     openaiKey: "",
   });
-
+  console.log('[background] 저장소에서 토큰 로드:', { notionToken: !!notionToken, openaiKey: !!openaiKey });
   if (!notionToken || !openaiKey) {
     throw new Error("Notion / OpenAI key가 설정되지 않았습니다.");
   }
-
   const markdown = await fetchPageAsMarkdown(pageId, notionToken);
+  console.log('[background] Notion → Markdown 변환 완료');
   return askLLM(markdown, openaiKey);
 }
 
-// 🔄 완전히 교체하세요
-async function fetchBlockTree(rootId, token) {
-  const blocks = [];
-  let cursor = null;
-
-  do {
-    const url =
-      `https://api.notion.com/v1/blocks/${rootId}/children?page_size=100` +
-      (cursor ? `&start_cursor=${cursor}` : "");
-
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Notion-Version": NOTION_VERSION,
-        "Content-Type": "application/json",
-      },
-    });
-    if (!res.ok) throw new Error(`Notion API error ${res.status}`);
-
-    const data = await res.json();
-    blocks.push(...data.results);
-    cursor = data.next_cursor;
-  } while (cursor);
-
-  // 자식이 있으면 재귀적으로 가져오기
-  for (const node of blocks) {
-    if (node.has_children) {
-      node.children = await fetchBlockTree(node.id, token);
-    }
-  }
-  return blocks;
-}
-
 async function fetchPageAsMarkdown(pageId, token) {
-  const tree = await fetchBlockTree(pageId, token);
-  return blocksToMarkdown(tree);   // 아래 2단계에서 개선
+  console.log('[background] fetchPageAsMarkdown 호출:', pageId);
+  // ➊ Notion SDK 인스턴스
+  // const notion = new NotionClient({ auth: token });
+  const notion = new NotionClient({
+    auth: token,
+    fetch: (...args) => fetch(...args),
+  });
+  // ➋ notion-to-md 래퍼
+  const n2m = new NotionToMarkdown({
+    notionClient: notion,
+    config: {
+      // separateChildPage: false,    // 자식 페이지는 한 덩어리로
+      parseChildPages: false       // 하위 페이지는 참조하지 않음
+    },
+  });
+  // ➌ 페이지 → Markdown
+  const mdBlocks = await n2m.pageToMarkdown(pageId);
+  console.log('[background] pageToMarkdown 결과:', mdBlocks);
+  const { parent: markdown } = n2m.toMarkdownString(mdBlocks);
+  console.log('[background] toMarkdownString 결과:', markdown);
+  return markdown;
 }
 
 async function askLLM(rawMd, openaiKey) {
+  console.log('[background] askLLM 호출, 입력 길이:', rawMd.length);
   const prompt = `Here is a general markdown document.
 
 Please convert this file to markdown for Marp slides.
@@ -115,18 +105,17 @@ Please convert the markdown below.`;
       body: JSON.stringify(body),
     }
   );
-
+  console.log('[background] Gemini API 요청 완료, status:', res.status);
   if (!res.ok) {
     const errBody = await res.json();
+    console.error('[background] Gemini API 오류:', errBody);
     throw new Error(
       `Gemini API error ${res.status}: ${errBody.error?.message || "Unknown"}`
     );
   }
-
   const data = await res.json();
   const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!raw) throw new Error("Gemini 응답에서 내용을 찾을 수 없습니다.");
-
   console.log("Gemini 응답:", raw);
   // ── 새 헬퍼로 펜스 제거 ──
   return extractMarkdown(raw);
@@ -134,6 +123,7 @@ Please convert the markdown below.`;
 
 /* ────────── 2. Marp → PDF ────────── */
 async function buildPdf(marpMd, title) {
+  console.log('[background] buildPdf 호출:', { title, mdLength: marpMd.length, content: marpMd.slice(0, 100) + '...' });
   const { html, css } = marp.render(marpMd);
   const htmlDoc = `<!doctype html>
   <html>
@@ -149,6 +139,7 @@ async function buildPdf(marpMd, title) {
   await htmlToPdf(htmlDoc, sanitize(title) + ".pdf");
 }
 
+/* ────────── 3. HTML → PDF 변환 ────────── */
 const DEBUG_PREVIEW = true;          // true 로 두면 탭이 눈에 보임
 
 function toBase64Utf8(str) {
@@ -171,10 +162,10 @@ async function waitTabComplete(tabId) {
 }
 
 async function htmlToPdf(htmlString, filename) {
+  console.log('[background] htmlToPdf 호출:', filename, htmlString.slice(0, 500) + '...');
   /* 1️⃣ data: URL 생성 */
   const dataUrl =
     "data:text/html;charset=utf-8;base64," + toBase64Utf8(htmlString);
-
   /* 2️⃣ 탭 열고 로드 완료 대기 */
   const { id: tabId } = await chrome.tabs.create({
     url: dataUrl,
@@ -182,7 +173,6 @@ async function htmlToPdf(htmlString, filename) {
   });
   await waitTabComplete(tabId);
   const target = { tabId };
-
   /* 3️⃣ PDF 생성 */
   try {
     await chrome.debugger.attach(target, "1.3");
@@ -192,20 +182,20 @@ async function htmlToPdf(htmlString, filename) {
       "Page.printToPDF",
       { printBackground: true, preferCSSPageSize: true }
     );
-
     /* 4️⃣ 다운로드 */
     await chrome.downloads.download({
       url: "data:application/pdf;base64," + data,
       filename,
       saveAs: true,
     });
+    console.log('[background] PDF 다운로드 완료:', filename);
   } finally {
     await chrome.debugger.detach(target).catch(() => { });
     if (!DEBUG_PREVIEW) await chrome.tabs.remove(tabId).catch(() => { });
   }
 }
 
-/* ────────── 3. 유틸 ────────── */
+/* ────────── 4. 유틸 ────────── */
 function getSenderTitle(sender) {
   return sender.tab?.title ?? "Notion-page";
 }
