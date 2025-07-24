@@ -31,7 +31,6 @@ function startExport() {
   chrome.runtime.sendMessage({ type: 'EXPORT_PAGE', pageId }, async ({ ok, marpMarkdown, error } = {}) => {
     if (!ok) return done('Export failed: ' + (error || 'Unknown error'));
     try {
-      // await renderMarpToPdf(marpMarkdown);
       chrome.runtime.sendMessage({ type: 'BUILD_PDF', marpMarkdown });
     } catch (e) {
       console.error(e);
@@ -59,34 +58,4 @@ function parseNotionPageId(path) {
   return id;
 }
 
-async function renderMarpToPdf(marpMarkdown) {
-  /* 1️⃣  utils/marp.js ─ ESM 빌드 */
-  const { Marp } = await import(
-    chrome.runtime.getURL('utils/marp.esm.js')    // ← CDN 대신 로컬 파일
-  );
-  const marp = new Marp();
 
-  /* 2️⃣  utils/html2pdf.esm.js ─ ESM 번들 */
-  const { default: html2pdf } = await import(
-    chrome.runtime.getURL('utils/html2pdf.esm.js')
-  );
-
-  /* 3️⃣  Marp 슬라이드 렌더링 → PDF 저장 */
-  const { html, css } = marp.render(marpMarkdown);
-  const slide = document.createElement('div');
-  slide.innerHTML = `<style>${css}</style>${html}`;
-  slide.style.background = '#fff';
-  document.body.appendChild(slide);
-
-  await html2pdf()
-    .set({
-      margin: 0,
-      filename: document.title.replace(/\s+/g, '-') + '.pdf',
-      html2canvas: { scale: 2 },
-      jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' }
-    })
-    .from(slide)
-    .save();
-
-  slide.remove();
-}
