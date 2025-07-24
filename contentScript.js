@@ -48,14 +48,15 @@ function startExport() {
 }
 
 function parseNotionPageId(path) {
-  // 전체가 32자리 UUID(하이픈 없음)인 경우
-  const clean = path.replace(/[^0-9a-f]/gi, '');
-  if (clean.length === 32) {
-    return clean.replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5');
-  }
-  // 기존 방식: 마지막 '-' 뒤 추출
-  const id = path.split('-').pop().replace(/[^0-9a-f]/gi, '');
-  return id.length === 32 ? id.replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5') : null;
+  // Notion 페이지 ID는 경로 마지막에 위치하는 32자리의 16진수 문자열입니다.
+  // 페이지 제목에 non-ASCII 문자가 포함된 경우 등 다양한 경로 형식을 처리하기 위해 정규식을 사용합니다.
+  // 예: /some-page-title-2206ec9cbfd080f4b785d3209a7b6ce8
+  // 예: /2206ec9cbfd080f4b785d3209a7b6ce8
+  const match = path.match(/([0-9a-f]{32})$/i);
+  if (!match) return null;
+
+  const id = match[1];
+  return id;
 }
 
 async function renderMarpToPdf(marpMarkdown) {
