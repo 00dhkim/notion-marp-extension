@@ -65,6 +65,36 @@ async function fetchPageAsMarkdown(pageId, token) {
   return markdown;
 }
 
+function parseOpenAIText(data) {
+  // 1) Responses API 정규 구조: output[].type === "message" → content[].type === "output_text"
+  try {
+    const outputs = Array.isArray(data?.output) ? data.output : [];
+    const msg = outputs.find(o => o?.type === "message");
+    if (msg && Array.isArray(msg.content)) {
+      const pieces = msg.content
+        .filter(c => c?.type === "output_text" && typeof c.text === "string")
+        .map(c => c.text);
+      if (pieces.length) return pieces.join("\n");
+    }
+  } catch (_) { /* ignore */ }
+
+  // 2) 일부 변형/래퍼 호환: 단일 text 필드
+  if (typeof data?.text?.value === "string") return data.text.value;
+  if (typeof data?.text === "string") return data.text;
+
+  // 3) 아주 드문 레거시/변형: output[].content[].text 바로 노출
+  try {
+    const outputs = Array.isArray(data?.output) ? data.output : [];
+    for (const o of outputs) {
+      const c = Array.isArray(o?.content) ? o.content : [];
+      const t = c.find(x => typeof x?.text === "string");
+      if (t) return t.text;
+    }
+  } catch (_) { /* ignore */ }
+
+  return null;
+}
+
 async function askLLM(rawMd, openaiKey) {
   console.log('[background] askLLM 호출, 입력 길이:', rawMd.length);
   const prompt = `Here is a general markdown document.
@@ -86,37 +116,63 @@ Conversion conditions:
 
 Please convert the markdown below.`;
 
+  // const body = {
+  //   model: "gemini-2.5-flash",
+  //   generationConfig: { temperature: 0 },
+  //   contents: [
+  //     {
+  //       role: "user",
+  //       parts: [{ text: `${prompt}\n\n${rawMd}` }],
+  //     },
+  //   ],
+  // };
   const body = {
-    model: "gemini-2.5-flash",
-    generationConfig: { temperature: 0 },
-    contents: [
+    model: "gpt-5-mini",
+    // input: `${prompt}\n\n${rawMd}`,
+    input: [
+      {
+        role: "developer",
+        content: prompt,
+      },
       {
         role: "user",
-        parts: [{ text: `${prompt}\n\n${rawMd}` }],
-      },
-    ],
+        content: rawMd,
+      }
+    ]
   };
 
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${body.model}:generateContent?key=${openaiKey}`,
+    // `https://generativelanguage.googleapis.com/v1beta/models/${body.model}:generateContent?key=${openaiKey}`,
+    "https://api.openai.com/v1/responses",
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openaiKey}` },
       body: JSON.stringify(body),
     }
   );
-  console.log('[background] Gemini API 요청 완료, status:', res.status);
+  console.log('[background] OpenAI API 요청 완료, status:', res.status);
   if (!res.ok) {
-    const errBody = await res.json();
-    console.error('[background] Gemini API 오류:', errBody);
+    let errBody;
+    try {
+      errBody = await res.text();
+    } catch (e) {
+      console.error('[background] OpenAI API 응답 파싱 오류:', e);
+    }
+    console.error('[background] OpenAI API 오류:', errBody);
     throw new Error(
-      `Gemini API error ${res.status}: ${errBody.error?.message || "Unknown"}`
+      `OpenAI API error ${res.status}: ${errBody.error?.message || "Unknown"}`
     );
   }
   const data = await res.json();
-  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!raw) throw new Error("Gemini 응답에서 내용을 찾을 수 없습니다.");
-  console.log("Gemini 응답:", raw);
+  // const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  // Responses API 표준 출력: output[0].content[0].text (단일 텍스트 사용 시)
+  const raw = parseOpenAIText(data);
+  if (!raw) {
+    console.error("OpenAI 응답에서 내용을 찾을 수 없습니다.", data);
+    throw new Error("OpenAI 응답에서 내용을 찾을 수 없습니다.");
+  }
+  console.log("OpenAI 응답:", raw);
   // ── 새 헬퍼로 펜스 제거 ──
   return extractMarkdown(raw);
 }

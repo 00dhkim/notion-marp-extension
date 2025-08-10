@@ -11,11 +11,13 @@
     "activeTab",
     "scripting",
     "downloads",
-    "debugger"
+    "debugger",
+    "tabs"
   ],
   "host_permissions": [
     "https://api.notion.com/*",
-    "https://generativelanguage.googleapis.com/*"
+    "https://generativelanguage.googleapis.com/*",
+    "https://api.openai.com/*"
   ],
   "background": {
     "service_worker": "dist/background.js",
